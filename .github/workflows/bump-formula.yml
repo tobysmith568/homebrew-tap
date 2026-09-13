@@ -1,0 +1,113 @@
+name: Bump formula
+run-name: Bump ${{ inputs.formula }} to v${{ inputs.version }}
+
+on:
+  workflow_call:
+    inputs:
+      formula:
+        description: Formula name — also the CLI's binary name and the Formula/<formula>.rb filename
+        required: true
+        type: string
+      version:
+        description: Release version to bump to (SemVer, no leading v)
+        required: true
+        type: string
+      repo:
+        description: "GitHub owner/repo the release assets and SHA256SUMS.txt live on, e.g. tobysmith568/gramdown"
+        required: true
+        type: string
+      desc:
+        description: One-line formula description
+        required: true
+        type: string
+      homepage:
+        description: Formula homepage URL
+        required: true
+        type: string
+      license:
+        description: SPDX license identifier
+        required: false
+        type: string
+        default: ISC
+      binary_prefix:
+        description: "Prefix of the darwin release assets, e.g. <binary_prefix>-darwin-arm64. Defaults to `formula`."
+        required: false
+        type: string
+        default: ""
+    secrets:
+      tap_pat:
+        description: Fine-grained PAT with contents + pull-request write access to this tap repo
+        required: true
+
+jobs:
+  bump:
+    name: Bump ${{ inputs.formula }} to v${{ inputs.version }}
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.tap_pat }}
+
+      - name: Create branch
+        run: git checkout -b "bump-${{ inputs.formula }}-${{ inputs.version }}"
+
+      - name: Resolve binary prefix
+        id: prefix
+        run: |
+          prefix="${{ inputs.binary_prefix }}"
+          if [ -z "$prefix" ]; then
+            prefix="${{ inputs.formula }}"
+          fi
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch release checksums
+        id: checksums
+        run: |
+          set -euo pipefail
+          checksums_url="https://github.com/${{ inputs.repo }}/releases/download/v${{ inputs.version }}/SHA256SUMS.txt"
+          checksums="$(curl -fsSL "$checksums_url")"
+          arm64_sha256="$(echo "$checksums" | grep "${{ steps.prefix.outputs.prefix }}-darwin-arm64\$" | cut -d' ' -f1)"
+          x64_sha256="$(echo "$checksums" | grep "${{ steps.prefix.outputs.prefix }}-darwin-x64\$" | cut -d' ' -f1)"
+          if [ -z "$arm64_sha256" ] || [ -z "$x64_sha256" ]; then
+            echo "Could not find darwin checksums for ${{ steps.prefix.outputs.prefix }} in $checksums_url" >&2
+            exit 1
+          fi
+          echo "arm64_sha256=$arm64_sha256" >> "$GITHUB_OUTPUT"
+          echo "x64_sha256=$x64_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Generate formula
+        env:
+          FORMULA: ${{ inputs.formula }}
+          VERSION: ${{ inputs.version }}
+          REPO: ${{ inputs.repo }}
+          DESC: ${{ inputs.desc }}
+          HOMEPAGE: ${{ inputs.homepage }}
+          LICENSE: ${{ inputs.license }}
+          BINARY_PREFIX: ${{ steps.prefix.outputs.prefix }}
+          ARM64_SHA256: ${{ steps.checksums.outputs.arm64_sha256 }}
+          X64_SHA256: ${{ steps.checksums.outputs.x64_sha256 }}
+        run: ruby scripts/generate-formula.rb
+
+      - name: Validate formula
+        uses: ./.github/actions/test-formula
+        with:
+          formula: ${{ inputs.formula }}
+
+      - name: Open the PR
+        env:
+          GH_TOKEN: ${{ secrets.tap_pat }}
+        run: |
+          set -euo pipefail
+          git config user.name "${{ inputs.formula }}-release-bot"
+          git config user.email "${{ inputs.formula }}-release-bot@users.noreply.github.com"
+          git commit -am "Bump ${{ inputs.formula }} to v${{ inputs.version }}"
+          git push origin "bump-${{ inputs.formula }}-${{ inputs.version }}"
+          gh pr create \
+            --title "Bump ${{ inputs.formula }} to v${{ inputs.version }}" \
+            --body "Automated update from ${{ inputs.repo }}'s release workflow. Already validated with \`brew audit\`, \`brew install\` and \`brew test\` before this PR was opened — set to merge automatically once Integration confirms the same on its own runner." \
+            --base main \
+            --head "bump-${{ inputs.formula }}-${{ inputs.version }}"
+          gh pr merge --auto --merge --delete-branch "bump-${{ inputs.formula }}-${{ inputs.version }}"

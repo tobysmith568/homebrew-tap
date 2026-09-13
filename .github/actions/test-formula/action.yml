@@ -1,0 +1,30 @@
+name: Test formula
+description: Audit, style-check, install, test, and uninstall a formula from this tap.
+
+inputs:
+  formula:
+    description: Formula name (matches Formula/<formula>.rb and the class it defines)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Audit
+      shell: bash
+      run: brew audit --strict --online "Formula/${{ inputs.formula }}.rb"
+
+    - name: Style
+      shell: bash
+      run: brew style "Formula/${{ inputs.formula }}.rb"
+
+    - name: Install
+      shell: bash
+      run: brew install --formula "./Formula/${{ inputs.formula }}.rb"
+
+    - name: Test
+      shell: bash
+      run: brew test "tobysmith568/tap/${{ inputs.formula }}"
+
+    - name: Uninstall
+      shell: bash
+      run: brew uninstall "${{ inputs.formula }}"
