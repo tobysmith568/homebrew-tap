@@ -9,17 +9,30 @@ inputs:
 runs:
   using: composite
   steps:
+    # brew audit no longer accepts a bare file path (only a formula name
+    # resolved through a tap). `brew tap <path>` clones via git, which would
+    # only see this checkout's last commit — bump-formula.yml deliberately
+    # validates a formula it hasn't committed yet, so a symlink is used
+    # instead: it makes brew see this exact working directory, uncommitted
+    # changes included, as the tap.
+    - name: Tap this checkout
+      shell: bash
+      run: |
+        taps_dir="$(brew --repository)/Library/Taps/tobysmith568"
+        mkdir -p "$taps_dir"
+        ln -sfn "$GITHUB_WORKSPACE" "$taps_dir/homebrew-tap"
+
     - name: Audit
       shell: bash
-      run: brew audit --strict --online "Formula/${{ inputs.formula }}.rb"
+      run: brew audit --strict --online "tobysmith568/tap/${{ inputs.formula }}"
 
     - name: Style
       shell: bash
-      run: brew style "Formula/${{ inputs.formula }}.rb"
+      run: brew style "tobysmith568/tap/${{ inputs.formula }}"
 
     - name: Install
       shell: bash
-      run: brew install --formula "./Formula/${{ inputs.formula }}.rb"
+      run: brew install "tobysmith568/tap/${{ inputs.formula }}"
 
     - name: Test
       shell: bash
