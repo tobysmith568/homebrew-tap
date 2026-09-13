@@ -2,7 +2,6 @@ class Gramdown < Formula
   desc "Turn a Grammarly .docx export into clean, GitHub-Flavored Markdown, from the command line."
   homepage "https://gramdown.tobythe.dev"
   license "ISC"
-  version "1.0.0"
 
   on_macos do
     on_arm do

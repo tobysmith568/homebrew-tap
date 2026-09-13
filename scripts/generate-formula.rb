@@ -23,7 +23,6 @@ content = <<~RUBY
     desc #{desc.inspect}
     homepage #{homepage.inspect}
     license #{license.inspect}
-    version #{version.inspect}
 
     on_macos do
       on_arm do
