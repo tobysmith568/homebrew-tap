@@ -1,5 +1,5 @@
 class Gramdown < Formula
-  desc "Turn a Grammarly .docx export into clean, GitHub-Flavored Markdown, from the command line."
+  desc "Turn a Grammarly .docx export into clean, GitHub-Flavored Markdown"
   homepage "https://gramdown.tobythe.dev"
   license "ISC"
 
